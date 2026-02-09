@@ -76,30 +76,25 @@ void controle(void *parameters)
         break;
     
       case AVANT:
-        if (angle > 0)                                          // En avant 
-        {
-          valPWM = (kp * (int)angle/(int)anglePositifMax*maxPWM);        // Calcul de la valeur PWM en fonction de l'angle d'inclinaison
-          valPWM = constrain(valPWM, 0, maxPWM);                // Contrainte de la valeur PWM entre 0 et maxPWM (1023)
-          ledcWrite(canal2, 0);
-          ledcWrite(canal3, 0);
-          ledcWrite(canal0, valPWM);
-          ledcWrite(canal1, valPWM);
-          if (angle == 0.0) etat = ARRET;
-          if (angle < 0.0) etat = ARRIERE;
-        }
-        break;
+        valPWM = (kp * (int)angle/(int)anglePositifMax*maxPWM);        // Calcul de la valeur PWM en fonction de l'angle d'inclinaison
+        valPWM = constrain(valPWM, 0, maxPWM);                // Contrainte de la valeur PWM entre 0 et maxPWM (1023)
+        ledcWrite(canal2, 0);
+        ledcWrite(canal3, 0);
+        ledcWrite(canal0, valPWM);
+        ledcWrite(canal1, valPWM);
+        if (angle == 0.0) etat = ARRET;
+        if (angle < 0.0) etat = ARRIERE;
+        break; 
+
       case ARRIERE:
-        if (angle < 0)                                            // En arrière
-        { 
-          valPWM = (kp * (int)angle/(int)angleNegatifMax*maxPWM); // Calcul de la valeur PWM en fonction de l'angle d'inclinaison
-          valPWM = constrain(valPWM, 0, maxPWM);                  // Contrainte de la valeur PWM entre 0 et maxPWM (1023)
-          ledcWrite(canal0, 0);
-          ledcWrite(canal1, 0);
-          ledcWrite(canal2, valPWM);
-          ledcWrite(canal3, valPWM);
-          if (angle == 0.0) etat = ARRET;
-          if (angle > 0.0) etat = AVANT;
-        }
+        valPWM = (kp * (int)angle/(int)angleNegatifMax*maxPWM); // Calcul de la valeur PWM en fonction de l'angle d'inclinaison
+        valPWM = constrain(valPWM, 0, maxPWM);                  // Contrainte de la valeur PWM entre 0 et maxPWM (1023)
+        ledcWrite(canal0, 0);
+        ledcWrite(canal1, 0);
+        ledcWrite(canal2, valPWM);
+        ledcWrite(canal3, valPWM);
+        if (angle == 0.0) etat = ARRET;
+        if (angle > 0.0) etat = AVANT;
         break;
     }
     
@@ -216,12 +211,12 @@ void reception(char ch)
     {
       kp = valeur.toInt();
     }
- 
-    
-    if (commande == "valPWM")
+
+    if (commande == "maxPWM")
     {
-      valPWM = valeur.toInt();
+      maxPWM = valeur.toInt();
     }
+
     chaine = "";
   }
   else
