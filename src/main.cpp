@@ -4,30 +4,47 @@
 #include <Wire.h>
 #include <BluetoothSerial.h>
 
-unsigned char PWMG = 17;                                    // PWM (vitesse) du moteur gauche
-unsigned char PWMD = 16;                                    // PWM (vitesse) du moteur droit
+#define AVANT 1
+#define ARRIERE 2 
+#define ARRET 0
+
+// ---Declaration des Broches---
+unsigned char PWMGplus = 17;                                    // PWM (vitesse) du moteur gauche
+unsigned char PWMDplus = 16;                                    // PWM (vitesse) du moteur droit
+
+unsigned char PWMGmoins = 4;                                    // PWM (vitesse) du moteur gauche
+unsigned char PWMDmoins = 19;                                    // PWM (vitesse) du moteur droit
+
 char Batterie = 25;                                         // Broche de lecture de la batterie 
 
+// ---Declaration des Objets---
 BluetoothSerial SerialBT;                                   // Objet Bluetooth Serial
 Adafruit_MPU6050 mpu;                                       // Objet pour le capteur MPU6050
 
-float angle,TetaG,TetaW;                                    // angle de l'inclinaison du gyropode, angle du gyroscope, angle de l'accélération
-float gyro;
+// ---Declaration des Variables---
+float TetaG,TetaW,angle;
+float TetaWF,TetaGF;                     
 char FlagCalcul = 0;
-float TetaWF,TetaGF,Ve, Vs = 0;
+float Ve, Vs = 0;
 float Te = 10;                                              // période d'échantillonage en ms
 float Tau = 1000;                                           // constante de temps du filtre en ms
 float A, B;                                                 // coefficient du filtre
-char kp = 5;                                              // coefficient de proportionnalité du correcteur
-const int maxPWM = 4095;
+
+float anglePositifMax = 38.0;
+float angleNegatifMax = -42.0;                     
+char kp = 1, etat=0;                                                // coefficient de proportionnalité du correcteur
+unsigned short maxPWM = 1024;
 
 float R1= 22000.0;                                          // résistance de 22 kohms
 float R2= 10000.0;                                          // résistance de 10 kohms
 float valeurbatterie;
 
-unsigned int frequence = 20000, valPWM = 2048;              // Fréquence de 20 kHz
+// ---Definition des PWM---
+unsigned int frequence = 20000, valPWM=1023;                     // Fréquence de 20 kHz
 unsigned char canal0 = 0;                                   // Canal 0 pour le moteur gauche
 unsigned char canal1 = 1;                                   // Canal 1 pour le moteur droit
+unsigned char canal2 = 2;                                   // Canal 2 pour le moteur gauche
+unsigned char canal3 = 3;                                   // Canal 1 pour le moteur droit
 unsigned char resolution = 10;                              // Résolution de 10 bits (valeurs de 0 à 1023)
 
 
@@ -46,8 +63,46 @@ void controle(void *parameters)
     TetaW  =  g.gyro.z * Tau/1000;                          // angle de l'accélération en radian  
     TetaWF = A* TetaW + B*TetaWF;                           // angle de l'accélération filtré en radian
  
-    angle = TetaWF + TetaGF;                                // angle de l'inclinaison du gyropode en radian
+    angle = (TetaWF + TetaGF) * 180 / PI;                   // angle de l'inclinaison du gyropode en degrés    
 
+    switch(etat) {
+      case ARRET:
+        ledcWrite(canal0, 0);
+        ledcWrite(canal1, 0);
+        ledcWrite(canal2, 0);
+        ledcWrite(canal3, 0);
+        if (angle < 0.0) etat = ARRIERE;
+        if (angle > 0.0) etat = AVANT;
+        break;
+    
+      case AVANT:
+        if (angle > 0)                                          // En avant 
+        {
+          valPWM = (kp * (int)angle/(int)anglePositifMax*maxPWM);        // Calcul de la valeur PWM en fonction de l'angle d'inclinaison
+          valPWM = constrain(valPWM, 0, maxPWM);                // Contrainte de la valeur PWM entre 0 et maxPWM (1023)
+          ledcWrite(canal2, 0);
+          ledcWrite(canal3, 0);
+          ledcWrite(canal0, valPWM);
+          ledcWrite(canal1, valPWM);
+          if (angle == 0.0) etat = ARRET;
+          if (angle < 0.0) etat = ARRIERE;
+        }
+        break;
+      case ARRIERE:
+        if (angle < 0)                                            // En arrière
+        { 
+          valPWM = (kp * (int)angle/(int)angleNegatifMax*maxPWM); // Calcul de la valeur PWM en fonction de l'angle d'inclinaison
+          valPWM = constrain(valPWM, 0, maxPWM);                  // Contrainte de la valeur PWM entre 0 et maxPWM (1023)
+          ledcWrite(canal0, 0);
+          ledcWrite(canal1, 0);
+          ledcWrite(canal2, valPWM);
+          ledcWrite(canal3, valPWM);
+          if (angle == 0.0) etat = ARRET;
+          if (angle > 0.0) etat = AVANT;
+        }
+        break;
+    }
+    
     FlagCalcul = 1;                                         // Indicateur que les calculs sont terminés
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(Te));     // Attente jusqu'au prochain cycle d'exécution de la tâche
   }
@@ -58,10 +113,8 @@ void Vin(void *parameters)                                  // Tâche pour la le
   Ve = 1;
   while (1)
   {
-    if (Ve == 1)
-      Ve = 0;
-    else
-      Ve = 1;
+    valeurbatterie=(((3.3/4095.0)*analogRead(Batterie)*(R1+R2))/R2)+0.3;     // Calcul de la valeur de la batterie en volts
+
     vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
@@ -76,11 +129,18 @@ void setup()
 
   // Configuration de la PWM
   ledcSetup(canal0, frequence, resolution);               
-  ledcSetup(canal1, frequence, resolution);                 
+  ledcSetup(canal1, frequence, resolution);         
+ 
+  ledcSetup(canal2, frequence, resolution);               
+  ledcSetup(canal3, frequence, resolution);      
+  
  
   // Liaison des canaux PWM aux broches
-  ledcAttachPin(PWMG, canal0);        
-  ledcAttachPin(PWMD, canal1);
+  ledcAttachPin(PWMGplus, canal0);        
+  ledcAttachPin(PWMDplus, canal1);
+  ledcAttachPin(PWMGmoins, canal2);
+  ledcAttachPin(PWMDmoins, canal3);
+  
 
   // Initialisation du capteur MPU6050
   if (!mpu.begin()) {
@@ -152,6 +212,12 @@ void reception(char ch)
       B = Tau / Te * A;
     }
     
+    if (commande == "kp")
+    {
+      kp = valeur.toInt();
+    }
+ 
+    
     if (commande == "valPWM")
     {
       valPWM = valeur.toInt();
@@ -162,24 +228,17 @@ void reception(char ch)
   {
     chaine += ch;
   }
-}s
+}
 
 void loop()
 {
   if (FlagCalcul == 1)
   {
- //Serial.printf("%f %f %f %f\n",TetaG,TetaGF,TetaWF,angle); // Affichage des angles sur le moniteur série
-
+    Serial.printf("Angle : %.2f, PWM : %.2f, anglemax : %.2f\n",angle); // Affichage des angles sur le moniteur série
+    //Serial.printf("valBatterie: %.4f \n", valeurbatterie); // Affichage de la valeur de la batterie sur le moniteur série
     FlagCalcul = 0;
   }
-  valPWM = kp * angle;                                     // Calcul de la valeur de la PWM en fonction de l'angle d'inclinaison du gyropode
-  valPWM = constrain(valPWM, 0, maxPWM);
-
-  ledcWrite(canal0, valPWM);
-  ledcWrite(canal1, valPWM);
-  valeurbatterie=(((3.3/4095.0)*analogRead(Batterie)*(R1+R2))/R2)+0.3;     // Calcul de la valeur de la batterie en volts
-  Serial.printf("valBatterie: %.4f \n", valeurbatterie);    
-
+  
 }
 
 void serialEvent()
