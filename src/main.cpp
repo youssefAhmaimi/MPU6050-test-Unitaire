@@ -19,6 +19,7 @@ float Te = 10;                                              // période d'échan
 float Tau = 1000;                                           // constante de temps du filtre en ms
 float A, B;                                                 // coefficient du filtre
 char kp = 5;                                              // coefficient de proportionnalité du correcteur
+const int maxPWM = 4095;
 
 float R1= 22000.0;                                          // résistance de 22 kohms
 float R2= 10000.0;                                          // résistance de 10 kohms
@@ -161,7 +162,7 @@ void reception(char ch)
   {
     chaine += ch;
   }
-}
+}s
 
 void loop()
 {
@@ -172,10 +173,13 @@ void loop()
     FlagCalcul = 0;
   }
   valPWM = kp * angle;                                     // Calcul de la valeur de la PWM en fonction de l'angle d'inclinaison du gyropode
+  valPWM = constrain(valPWM, 0, maxPWM);
+
   ledcWrite(canal0, valPWM);
   ledcWrite(canal1, valPWM);
   valeurbatterie=(((3.3/4095.0)*analogRead(Batterie)*(R1+R2))/R2)+0.3;     // Calcul de la valeur de la batterie en volts
-  Serial.printf("valBatterie: %.4f \n", valeurbatterie);            // Affichage de la valeur de la batterie sur le moniteur série
+  Serial.printf("valBatterie: %.4f \n", valeurbatterie);    
+
 }
 
 void serialEvent()
